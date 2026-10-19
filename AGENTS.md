@@ -7,4 +7,3 @@
   étant gardée dans `<home>/tmp/deploy-backups/grav-twig-z/<date>/`. Exclus : `.git`, `.github`, `.gitignore`, `AGENTS.md`.
 - Utilisé par tous les sites Grav 2 de l'hébergement : tester avant de pousser.
 - La tâche planifiée de mise à jour (php-global-page-router) ne touche jamais cette extension (« github.com/flavi1 »).
-- `.deploy-ok` : témoin du premier déploiement, à retirer une fois le déploiement confirmé.
