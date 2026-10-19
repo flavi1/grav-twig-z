@@ -1,7 +1,7 @@
 # Déploiement dans le Grav partagé (<home>/shared/grav-2/user/plugins/twig-z/) par rsync sur SSH, comme les plugins de la boutique,
 # avec les identifiants de l'hébergement (secrets FTP_SERVER, FTP_USERNAME, FTP_PASSWORD ; la connexion se fait en SSH).
-# Sûreté : aucun fichier n'est supprimé sur le serveur ; un fichier n'est remplacé que si son contenu diffère, l'ancienne
-# version étant gardée dans <home>/tmp/deploy-backups/grav-twig-z/<date>/. Variables facultatives : SSH_HOST, SSH_PORT, GRAV_USER_DIR.
+# Miroir : le dossier du serveur devient identique au dépôt (fichiers en trop supprimés) — possible car il ne contient ni
+# configuration de site ni donnée (dossier partagé). Chaque fichier remplacé ou supprimé est d'abord gardé dans <home>/tmp/deploy-backups/grav-twig-z/<date>/. Variables facultatives : SSH_HOST, SSH_PORT, GRAV_USER_DIR.
 name: Déploiement (rsync/ssh)
 
 on:
@@ -71,8 +71,8 @@ jobs:
           fi
           STAMP="$(date -u +%Y%m%d-%H%M%S)-${GITHUB_SHA::7}"
           BACKUP="$BASE/tmp/deploy-backups/grav-twig-z/$STAMP"
-          # Sans --delete : rien n'est supprimé sur le serveur. --checksum : seul un contenu différent est remplacé.
-          sshpass -e rsync -rltzc -i --backup --backup-dir="$BACKUP" \
+          # Miroir (--delete) : fichiers en trop supprimés ; --backup : tout fichier remplacé ou supprimé est gardé dans $BACKUP.
+          sshpass -e rsync -rltzc -i --delete --backup --backup-dir="$BACKUP" \
             --exclude '/.git' --exclude '/.github' --exclude '/.gitignore' --exclude '/AGENTS.md' \
             -e "ssh $SSH_OPTS" ./ "$REMOTE_USER@$HOST:$DEST/"
           echo "Déployé dans $DEST (anciennes versions des fichiers remplacés : $BACKUP, s'il y en a)."
