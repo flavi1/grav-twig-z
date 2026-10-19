@@ -1,0 +1,78 @@
+# Déploiement dans le Grav partagé (<home>/shared/grav-2/user/plugins/twig-z/) par rsync sur SSH, comme les plugins de la boutique,
+# avec les identifiants de l'hébergement (secrets FTP_SERVER, FTP_USERNAME, FTP_PASSWORD ; la connexion se fait en SSH).
+# Sûreté : aucun fichier n'est supprimé sur le serveur ; un fichier n'est remplacé que si son contenu diffère, l'ancienne
+# version étant gardée dans <home>/tmp/deploy-backups/grav-twig-z/<date>/. Variables facultatives : SSH_HOST, SSH_PORT, GRAV_USER_DIR.
+name: Déploiement (rsync/ssh)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  lint:
+    name: Syntaxe PHP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: none
+      - name: php -l
+        run: |
+          find . -name '*.php' -not -path './.git/*' -print0 | xargs -0 -r -n1 php -l > /dev/null
+
+  deploy:
+    name: Envoi rsync/ssh
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Outils (sshpass, rsync)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass rsync > /dev/null
+      - name: Envoi vers shared/grav-2/user/plugins/twig-z
+        env:
+          SSHPASS: ${{ secrets.FTP_PASSWORD }}
+          REMOTE_HOST: ${{ secrets.FTP_SERVER }}
+          REMOTE_USER: ${{ secrets.FTP_USERNAME }}
+          USER_DIR: ${{ vars.GRAV_USER_DIR }}
+          SSH_HOST: ${{ vars.SSH_HOST }}
+          SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SSHPASS" ] || [ -z "$REMOTE_HOST" ] || [ -z "$REMOTE_USER" ]; then
+            echo "::error::Secrets FTP_SERVER / FTP_USERNAME / FTP_PASSWORD absents."
+            exit 1
+          fi
+          BASE="/home/$REMOTE_USER"
+          UDIR="${USER_DIR:-$BASE/shared/grav-2/user}"
+          UDIR="${UDIR%/}"
+          DEST="$UDIR/plugins/twig-z"
+          # Hôte SSH : variable SSH_HOST, sinon FTP_SERVER ; chez OVH, « ftp.clusterNNN… » a pour équivalent « ssh.clusterNNN… ».
+          SSH_OPTS="-p $SSH_PORT -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o PubkeyAuthentication=no"
+          HOST=""
+          for h in $SSH_HOST $REMOTE_HOST $(echo "$REMOTE_HOST" | sed -n 's/^ftp\./ssh./p'); do
+            # Garde-fou : le dossier user du Grav partagé doit exister (on ne crée jamais une arborescence au hasard).
+            if sshpass -e ssh $SSH_OPTS "$REMOTE_USER@$h" "test -d '$UDIR/plugins'" 2>/tmp/ssh.err; then HOST="$h"; break; fi
+            echo "Connexion ou dossier refusé via un des hôtes essayés : $(tail -1 /tmp/ssh.err || true)"
+          done
+          if [ -z "$HOST" ]; then
+            echo "::error::Connexion SSH impossible, ou dossier $UDIR/plugins absent."
+            exit 1
+          fi
+          STAMP="$(date -u +%Y%m%d-%H%M%S)-${GITHUB_SHA::7}"
+          BACKUP="$BASE/tmp/deploy-backups/grav-twig-z/$STAMP"
+          # Sans --delete : rien n'est supprimé sur le serveur. --checksum : seul un contenu différent est remplacé.
+          sshpass -e rsync -rltzc -i --backup --backup-dir="$BACKUP" \
+            --exclude '/.git' --exclude '/.github' --exclude '/.gitignore' --exclude '/AGENTS.md' \
+            -e "ssh $SSH_OPTS" ./ "$REMOTE_USER@$HOST:$DEST/"
+          echo "Déployé dans $DEST (anciennes versions des fichiers remplacés : $BACKUP, s'il y en a)."

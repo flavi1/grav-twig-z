@@ -1,0 +1,29 @@
+name: Twig Z
+slug: twig-z
+type: plugin
+version: 1.0.0
+description: "Fonction Twig z(template, fichier) : choisit z/<template>/<fichier>, sinon z/_all/<fichier> (convention Zpip du thème no-js)."
+icon: code
+author:
+  name: Flavien Guillon
+  email: flavien.guillon@gmail.com
+homepage: https://github.com/flavi1/grav-twig-z
+bugs: https://github.com/flavi1/grav-twig-z/issues
+license: MIT
+
+dependencies:
+  - { name: grav, version: '>=1.7.0' }
+
+form:
+  validation: loose
+  fields:
+    enabled:
+      type: toggle
+      label: PLUGIN_ADMIN.PLUGIN_STATUS
+      highlight: 1
+      default: 1
+      options:
+        1: PLUGIN_ADMIN.ENABLED
+        0: PLUGIN_ADMIN.DISABLED
+      validate:
+        type: bool
